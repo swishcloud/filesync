@@ -24,7 +24,12 @@ var serveCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
-		s := server.NewFileSyncServer(port, root, repeat)
+
+		filters, err := cmd.Flags().GetString("filters")
+		if err != nil {
+			log.Println(err)
+		}
+		s := server.NewFileSyncServer(port, root, repeat, filters)
 		s.Serve()
 	},
 }
@@ -33,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().String("port", "2000", "server listen port")
 	serveCmd.Flags().String("root", "", "file location root path")
-	serveCmd.Flags().String("repeat", "", "repeat data from another server addr")
+	serveCmd.Flags().String("repeat", "", "repeat file from another server addr")
+	serveCmd.Flags().String("filters", "", "ignore files with specified name while repeating files,use colon to separate multiple names")
 	serveCmd.MarkFlagRequired("root")
 }

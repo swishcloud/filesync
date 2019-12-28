@@ -24,7 +24,7 @@ func Test_encode_decode(t *testing.T) {
 func Test_ReadBytes(t *testing.T) {
 	greeting := "hello,world"
 	g_b := []byte(greeting)
-	b, err := ReadBytes(bytes.NewReader(g_b), len(g_b))
+	_, b, err := ReadBytes(bytes.NewReader(g_b), len(g_b))
 	str := string(b)
 	println(str)
 	if err != nil || greeting != str {

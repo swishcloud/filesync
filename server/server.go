@@ -8,22 +8,26 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/swishcloud/filesync/message"
+	"github.com/swishcloud/filesync/message/models"
 	"github.com/swishcloud/filesync/session"
 	"github.com/swishcloud/filesync/x"
 )
 
 type FileSyncServer struct {
 	Port    string
+	Filters string
 	Repeat  string
 	Storage *Storage
 }
 
-func NewFileSyncServer(port string, root string, repeat string) *FileSyncServer {
-	s := &FileSyncServer{Port: port, Repeat: repeat}
-	s.Storage = NewStorage(root)
+func NewFileSyncServer(port string, root string, repeat string, filters string) *FileSyncServer {
+	s := &FileSyncServer{Port: port, Repeat: repeat, Filters: filters}
+	s.Storage = NewStorage(root, filters)
 	return s
 }
 func (s *FileSyncServer) Serve() {
@@ -75,14 +79,23 @@ func (server *FileSyncServer) startRepeat() {
 		if err != nil {
 			panic(err)
 		}
-		files := []string{}
+		files := []models.File{}
 		s.ReadJson(int(reply.BodySize), &files)
 		log.Println("got file list:", files)
 		for i := 0; i < len(files); i++ {
-			fileName := files[i]
+			fileName := files[i].Path
 			file_path := path.Join(server.Storage.root, fileName)
 			if x.PathExist(file_path) {
 				log.Printf("%s exists,skip", file_path)
+				continue
+			}
+			if files[i].IsFolder {
+				err = os.Mkdir(file_path, os.ModePerm)
+				if err != nil {
+					panic(err)
+				}
+				log.Println("create folder:", file_path)
+				checkFile(files[i], file_path)
 				continue
 			}
 			msg.MsgType = message.MT_Download_File
@@ -99,10 +112,20 @@ func (server *FileSyncServer) startRepeat() {
 			if err != nil {
 				panic(err)
 			}
+			checkFile(files[i], file_path)
 			log.Println("received file:", fileName)
 		}
 		s.Close()
 		log.Println("finished repeating")
+	}
+}
+
+func checkFile(file models.File, fullPath string) {
+	if file.IsHidden {
+		err := x.HideFile(fullPath)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -151,15 +174,9 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			}
 			log.Println("sent file:", file)
 		case message.MT_Get_All_Files:
-			fileInfos, err := s.Storage.GetFiles()
+			files, err := s.Storage.GetFiles(s.Storage.root, "")
 			if err != nil {
 				panic(err)
-			}
-			files := []string{}
-			for i := 0; i < len(fileInfos); i++ {
-				if !fileInfos[i].IsDir() {
-					files = append(files, fileInfos[i].Name())
-				}
 			}
 			reply_msg := new(message.Message)
 			reply_msg.MsgType = message.MT_Reply
@@ -176,20 +193,54 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 }
 
 type Storage struct {
-	root string
+	root    string
+	filters []string
 }
 
 //s.Ack()
-func NewStorage(root string) *Storage {
+func NewStorage(root, filters string) *Storage {
 	storage := new(Storage)
 	storage.root = root
+	if filters != "" {
+		storage.filters = strings.Split(filters, ";")
+	} else {
+		storage.filters = []string{}
+	}
 	return storage
 }
-
-func (s *Storage) GetFiles() ([]os.FileInfo, error) {
-	files, err := ioutil.ReadDir(s.root)
+func (s *Storage) Ignore(path string) bool {
+	for i := 0; i < len(s.filters); i++ {
+		if filepath.Base(path) == s.filters[i] {
+			return true
+		}
+	}
+	return false
+}
+func (s *Storage) GetFiles(p string, prefix string) ([]models.File, error) {
+	fileInfos, err := ioutil.ReadDir(p)
 	if err != nil {
 		return nil, err
+	}
+	files := []models.File{}
+	for i := 0; i < len(fileInfos); i++ {
+		file := models.File{IsFolder: fileInfos[i].IsDir(), Path: prefix + fileInfos[i].Name()}
+		fullPath := s.root + "/" + file.Path
+		if s.Ignore(fullPath) {
+			log.Printf("Ignore file or directory:%s", fullPath)
+			continue
+		}
+		file.IsHidden, err = x.IsHidden(fullPath)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+		if file.IsFolder {
+			fs, err := s.GetFiles(fullPath, file.Path+"/")
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, fs...)
+		}
 	}
 	return files, nil
 }

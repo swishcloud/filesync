@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile | log.LUTC)
+	log.SetFlags(log.Ldate | log.Ltime | log.LUTC)
 	cmd.Execute()
 }
