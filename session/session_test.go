@@ -95,8 +95,11 @@ func Test_Session(t *testing.T) {
 			log.Fatal(err)
 		}
 	}
-	flepath := "/root/Desktop/root1/large file.zip"
-	err = s.SendFile(flepath)
+	flepath := "/root/Desktop/root1/F/large file.zip"
+	err = s.SendFile(flepath, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 	msg := message.NewMessage(message.MT_PING)
 	msg.Header["talk"] = "how are you"
 	reply, err := s.Fetch(msg, nil)

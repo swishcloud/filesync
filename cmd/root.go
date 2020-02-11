@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var skip_tls_verify = false
 var rootCmd = &cobra.Command{
 	Use:   "filesync",
 	Short: "filesync is file transfering server",
@@ -20,4 +21,7 @@ func Execute() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+func init() {
+	rootCmd.PersistentFlags().BoolVar(&skip_tls_verify, "skip-tls-verify", false, "skip tls verify")
 }

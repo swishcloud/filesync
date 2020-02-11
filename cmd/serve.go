@@ -29,7 +29,7 @@ var serveCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
-		s := server.NewFileSyncServer(port, root, repeat, filters)
+		s := server.NewFileSyncServer(port, root, repeat, filters, true)
 		s.Serve()
 	},
 }

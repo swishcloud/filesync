@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"log"
+	"os"
 	"testing"
 
 	"github.com/swishcloud/filesync/message"
@@ -20,4 +21,8 @@ func Test_message(t *testing.T) {
 	r := msg.Reader()
 	read, _ := message.ReadMessage(r)
 	log.Println(read.MsgType)
+}
+
+func init() {
+	os.Chdir("../")
 }

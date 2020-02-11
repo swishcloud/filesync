@@ -69,17 +69,15 @@ func (s *Session) ReadMessage() (*message.Message, error) {
 	s.last_msg_rest = msg.BodySize
 	return msg, nil
 }
-func (s *Session) write(r io.Reader) (written int64, err error) {
-	w, err := io.Copy(s._c, r)
-	if err != nil {
-		return w, err
-	}
-	s.written += w
-	return w, nil
+func (s *Session) Write(p []byte) (n int, err error) {
+	n, err = s._c.Write(p)
+	s.written += int64(n)
+	return n, err
 }
 func (s *Session) Read(p []byte) (n int, err error) {
 	n, err = s._c.Read(p)
 	s.read += int64(n)
+	s.last_msg_rest -= int64(n)
 	return n, err
 }
 func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_size int64) error {
@@ -99,21 +97,21 @@ func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_s
 
 	size_b := []byte(strconv.Itoa(len(msg_b)))
 
-	_, err = s.write(bytes.NewReader(size_b))
+	_, err = io.CopyN(s, bytes.NewReader(size_b), int64(len(size_b)))
 	if err != nil {
 		return err
 	}
 
-	_, err = s.write(bytes.NewReader([]byte{0}))
+	_, err = io.CopyN(s, bytes.NewReader([]byte{0}), 1)
 	if err != nil {
 		return err
 	}
-	_, err = s.write(bytes.NewReader(msg_b))
+	_, err = io.CopyN(s, bytes.NewReader(msg_b), int64(len(msg_b)))
 	if err != nil {
 		return err
 	}
 	if payload != nil {
-		n, err := s.write(payload)
+		n, err := io.CopyN(s, payload, msg.BodySize)
 		if err != nil {
 			return err
 		}
@@ -127,7 +125,7 @@ func (s *Session) Ack() error {
 	msg := message.NewMessage(message.MT_ACK)
 	return s.Send(msg, nil)
 }
-func (s *Session) SendFile(file_path string) error {
+func (s *Session) SendFile(file_path string, pre_send func(string, string, int64) (int64, bool)) error {
 	msg := message.NewMessage(message.MT_FILE)
 	md5, err := x.Hash_file_md5(file_path)
 	if err != nil {
@@ -144,7 +142,19 @@ func (s *Session) SendFile(file_path string) error {
 		return err
 	}
 	msg.Header["file_name"] = file_info.Name()
-	return s.SendMessage(msg, f, file_info.Size())
+	payload_size := file_info.Size()
+	if pre_send != nil {
+		offset, ok := pre_send(file_info.Name(), md5, file_info.Size())
+		if !ok {
+			return nil
+		}
+		_, err := f.Seek(offset, 1)
+		if err != nil {
+			return err
+		}
+		payload_size -= offset
+	}
+	return s.SendMessage(msg, f, payload_size)
 }
 func (s *Session) Send(msg *message.Message, data interface{}) error {
 	var payload io.Reader = nil
@@ -168,13 +178,9 @@ func (s *Session) Fetch(msg *message.Message, data interface{}) (*message.Messag
 }
 func (s *Session) ReadJson(size int, v interface{}) error {
 	buf := new(bytes.Buffer)
-	written, err := io.CopyN(buf, s, int64(size))
+	_, err := io.CopyN(buf, s, int64(size))
 	if err != nil {
 		return err
-	}
-	s.last_msg_rest -= written
-	if s.last_msg_rest < 0 {
-		return errors.New("too manay bytes read")
 	}
 	return json.Unmarshal(buf.Bytes(), v)
 }
@@ -184,10 +190,6 @@ func (s *Session) ReadFile(filepath string, md5 string, size int64) (written int
 		return 0, err
 	}
 	written, err = io.CopyN(f, s, size)
-	s.last_msg_rest -= written
-	if s.last_msg_rest < 0 {
-		return written, errors.New("too manay bytes read")
-	}
 	f.Close()
 	hash, err := x.Hash_file_md5(filepath)
 	if hash != md5 {

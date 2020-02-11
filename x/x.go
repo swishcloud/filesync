@@ -3,13 +3,20 @@ package x
 import (
 	"bytes"
 	"crypto/md5"
+	"crypto/tls"
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"io"
+	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
+
+	"github.com/swishcloud/filesync/internal"
 )
+
+const Server_id = "5f1edf5340ad0252d2fb3f85519badb8"
 
 func Encode(data interface{}) ([]byte, error) {
 	buf := new(bytes.Buffer)
@@ -72,4 +79,20 @@ func Hash_file_md5(filePath string) (string, error) {
 func PathExist(file_path string) bool {
 	_, err := os.Stat(file_path)
 	return err == nil
+}
+
+func GetApiUrlPath(p string) string {
+	return internal.GlobalConfig().BaseApiUrlPath + p
+}
+func DefaultClient() *http.Client {
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+	http.DefaultClient = client
+	return client
+}
+func LogReader(prefix string, r io.Reader) {
+	b, err := ioutil.ReadAll(r)
+	if err != nil {
+		panic(err)
+	}
+	log.Println(prefix, string(b))
 }
