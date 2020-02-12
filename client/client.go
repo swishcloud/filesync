@@ -9,6 +9,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/swishcloud/filesync/internal"
+
 	"github.com/swishcloud/filesync/auth"
 	"github.com/swishcloud/filesync/message"
 	"github.com/swishcloud/filesync/x"
@@ -80,6 +82,7 @@ func SendFile(file_path string, skip_tls_verify bool) error {
 	size := file_info.Size()
 	msg.Header["md5"] = md5
 	msg.Header["file_name"] = name
+	msg.Header[internal.TokenHeaderKey] = auth.GetToken().AccessToken
 
 	data := getFileData(file_info.Name(), md5, skip_tls_verify)
 	is_completed := false

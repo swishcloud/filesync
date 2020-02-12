@@ -10,7 +10,7 @@ import (
 )
 
 func runSimpleServer() {
-	server := server.NewFileSyncServer("3000", "/root/Desktop/root", "", "", true)
+	server := server.NewFileSyncServer("server.yaml", true)
 	go server.Serve()
 	time.Sleep(time.Millisecond * 100)
 }

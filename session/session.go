@@ -18,13 +18,15 @@ import (
 )
 
 type Session struct {
-	_c                   net.Conn
-	written              int64
-	read                 int64
-	last_msg_rest        int64
-	presentWriteProgress PresentWriteProgress
-	write_speed_n        int64
-	closed               bool
+	_c                     net.Conn
+	written                int64
+	read                   int64
+	last_msg_rest          int64
+	presentWriteProgress   PresentWriteProgress
+	write_speed_counter    int64
+	write_speed            int64
+	write_speed_clear_time time.Time
+	closed                 bool
 }
 type PresentWriteProgress func(n int)
 
@@ -37,7 +39,9 @@ func NewSession(c net.Conn) *Session {
 func (s *Session) speedTimer() {
 	for !s.closed {
 		time.Sleep(time.Second * 1)
-		s.write_speed_n = 0
+		s.write_speed = s.write_speed_counter
+		s.write_speed_counter = 0
+		s.write_speed_clear_time = time.Now()
 	}
 }
 func (s *Session) Close() {
@@ -83,12 +87,15 @@ func (s *Session) ReadMessage() (*message.Message, error) {
 	return msg, nil
 }
 func (s *Session) Write(p []byte) (n int, err error) {
+	t := time.Now()
 	n, err = s._c.Write(p)
 	if s.presentWriteProgress != nil {
 		s.presentWriteProgress(n)
 	}
 	s.written += int64(n)
-	s.write_speed_n += int64(n)
+	if !t.Before(s.write_speed_clear_time) {
+		s.write_speed_counter += int64(n)
+	}
 	return n, err
 }
 func (s *Session) Read(p []byte) (n int, err error) {
@@ -133,7 +140,7 @@ func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_s
 		s.presentWriteProgress = func(n int) {
 			written += int64(n)
 			percent := int(float64(written) / float64(total) * 100)
-			s, u := common.FormatByteSize(s.write_speed_n)
+			s, u := common.FormatByteSize(s.write_speed)
 			fmt.Print("\r")
 			info := fmt.Sprintf("sent %d/%d bytes %d%%,%s %s/s               ", written, total, percent, s, u)
 			info = common.StringLimitLen(info, 50)

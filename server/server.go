@@ -13,11 +13,16 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/swishcloud/filesync/internal"
+
+	"golang.org/x/oauth2"
+	"gopkg.in/yaml.v2"
+
 	"github.com/google/uuid"
-	"github.com/swishcloud/filesync/auth"
 	"github.com/swishcloud/filesync/message"
 	"github.com/swishcloud/filesync/message/models"
 	"github.com/swishcloud/filesync/session"
@@ -26,27 +31,39 @@ import (
 )
 
 type FileSyncServer struct {
-	Port            string
-	Filters         string
-	Repeat          string
+	config          *config
 	Storage         *Storage
 	skip_tls_verify bool
 	httpClient      *http.Client
 }
+type config struct {
+	IntrospectTokenURL string `yaml:"IntrospectTokenURL"`
+	Port               string `yaml:"Port"`
+	FileLocation       string `yaml:"FileLocation"`
+}
 
-func NewFileSyncServer(port string, root string, repeat string, filters string, skip_tls_verify bool) *FileSyncServer {
-	s := &FileSyncServer{Port: port, Repeat: repeat, Filters: filters}
-	s.Storage = NewStorage(root, filters)
+func NewFileSyncServer(config_file_path string, skip_tls_verify bool) *FileSyncServer {
+	s := &FileSyncServer{}
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
+	s.config = new(config)
+	b, err := ioutil.ReadFile(config_file_path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = yaml.Unmarshal(b, s.config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	s.Storage = NewStorage(s.config.FileLocation, "")
 	return s
 }
 func (s *FileSyncServer) Serve() {
 	// Listen on TCP port 2000 on all available unicast and
 	// anycast IP addresses of the local system.
-	l, err := net.Listen("tcp", ":"+s.Port)
-	log.Println("accepting tcp connections on port", s.Port)
+	l, err := net.Listen("tcp", ":"+s.config.Port)
+	log.Println("accepting tcp connections on port", s.config.Port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,59 +94,59 @@ func (server *FileSyncServer) startRepeat() {
 			log.Printf("repeating failed,cause:%s", err)
 		}
 	}()
-	if server.Repeat != "" {
-		log.Println("start repeating data from server addr:", server.Repeat)
-		conn, err := net.Dial("tcp", server.Repeat)
-		if err != nil {
-			panic(err)
-		}
-		log.Println("connected successfully", server.Repeat)
-		s := session.NewSession(conn)
-		msg := new(message.Message)
-		msg.MsgType = message.MT_Get_All_Files
-		reply, err := s.Fetch(msg, nil)
-		if err != nil {
-			panic(err)
-		}
-		files := []models.File{}
-		s.ReadJson(int(reply.BodySize), &files)
-		log.Println("got file list:", files)
-		for i := 0; i < len(files); i++ {
-			fileName := files[i].Path
-			file_path := path.Join(server.Storage.root, fileName)
-			if x.PathExist(file_path) {
-				log.Printf("%s exists,skip", file_path)
-				continue
-			}
-			if files[i].IsFolder {
-				err = os.Mkdir(file_path, os.ModePerm)
-				if err != nil {
-					panic(err)
-				}
-				log.Println("create folder:", file_path)
-				checkFile(files[i], file_path)
-				continue
-			}
-			msg.MsgType = message.MT_Download_File
-			err := s.Send(msg, fileName)
-			if err != nil {
-				panic(err)
-			}
-			reply, err := s.ReadMessage()
-			if err != nil {
-				panic(err)
-			}
-			log.Println("downloading file:", fileName)
-			_, err = s.ReadFile(file_path, reply.Header["md5"].(string), reply.BodySize)
-			if err != nil {
-				panic(err)
-			}
-			checkFile(files[i], file_path)
-			log.Println("received file:", fileName)
-		}
-		s.Close()
-		log.Println("finished repeating")
-	}
+	// if server.Repeat != "" {
+	// 	log.Println("start repeating data from server addr:", server.Repeat)
+	// 	conn, err := net.Dial("tcp", server.Repeat)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	log.Println("connected successfully", server.Repeat)
+	// 	s := session.NewSession(conn)
+	// 	msg := new(message.Message)
+	// 	msg.MsgType = message.MT_Get_All_Files
+	// 	reply, err := s.Fetch(msg, nil)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	files := []models.File{}
+	// 	s.ReadJson(int(reply.BodySize), &files)
+	// 	log.Println("got file list:", files)
+	// 	for i := 0; i < len(files); i++ {
+	// 		fileName := files[i].Path
+	// 		file_path := path.Join(server.Storage.root, fileName)
+	// 		if x.PathExist(file_path) {
+	// 			log.Printf("%s exists,skip", file_path)
+	// 			continue
+	// 		}
+	// 		if files[i].IsFolder {
+	// 			err = os.Mkdir(file_path, os.ModePerm)
+	// 			if err != nil {
+	// 				panic(err)
+	// 			}
+	// 			log.Println("create folder:", file_path)
+	// 			checkFile(files[i], file_path)
+	// 			continue
+	// 		}
+	// 		msg.MsgType = message.MT_Download_File
+	// 		err := s.Send(msg, fileName)
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		reply, err := s.ReadMessage()
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		log.Println("downloading file:", fileName)
+	// 		_, err = s.ReadFile(file_path, reply.Header["md5"].(string), reply.BodySize)
+	// 		if err != nil {
+	// 			panic(err)
+	// 		}
+	// 		checkFile(files[i], file_path)
+	// 		log.Println("received file:", fileName)
+	// 	}
+	// 	s.Close()
+	// 	log.Println("finished repeating")
+	// }
 }
 
 func checkFile(file models.File, fullPath string) {
@@ -159,6 +176,31 @@ func getFileData(file_name, md5 string) map[string]interface{} {
 	}
 	return m["data"].(map[string]interface{})
 }
+func (s *FileSyncServer) checkToken(msg *message.Message) (user_id string, err error) {
+	token := msg.Header[internal.TokenHeaderKey]
+	if token == nil {
+		return "", errors.New("token is missing")
+	}
+	rac := common.NewRestApiClient("GET", s.config.IntrospectTokenURL, nil, s.skip_tls_verify).SetAuthHeader(&oauth2.Token{AccessToken: token.(string)})
+	resp, err := rac.DoExpect200Status()
+	if err != nil {
+		return "", err
+	}
+	m := common.ReadAsMap(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if m["error"] != nil {
+		return "", errors.New(m["error"].(string))
+	}
+	data := m["data"].(map[string]interface{})
+	isActive := data["active"].(bool)
+	if !isActive {
+		return "", errors.New("the token is not valid")
+	}
+	sub := data["sub"].(string)
+	return sub, nil
+}
 func (s *FileSyncServer) serveSession(c net.Conn) {
 	session := session.NewSession(c)
 	defer func() {
@@ -179,6 +221,10 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			reply_msg.MsgType = message.MT_PANG
 			session.SendMessage(reply_msg, nil, 0)
 		case message.MT_FILE:
+			_, err := s.checkToken(msg)
+			if err != nil {
+				panic(err)
+			}
 			file_name := msg.Header["file_name"].(string)
 			md5 := msg.Header["md5"].(string)
 			data := getFileData(file_name, md5)
@@ -200,7 +246,12 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			start := uploaded_size
 			end := written + start
 			//record uploaded file block
-			rac := common.NewRestApiClient("POST", x.GetApiUrlPath("file-block"), []byte(fmt.Sprintf("server_file_id=%s&name=%s&start=%d&end=%d", server_file_id, block_name, start, end)), false).SetAuthHeader(auth.GetToken())
+			parameters := url.Values{}
+			parameters.Add("server_file_id", server_file_id)
+			parameters.Add("name", block_name)
+			parameters.Add("start", strconv.FormatInt(start, 10))
+			parameters.Add("end", strconv.FormatInt(end, 10))
+			rac := common.NewRestApiClient("POST", x.GetApiUrlPath("file-block"), []byte(parameters.Encode()), false)
 			_, err = rac.Do()
 			if err != nil {
 				panic(err)
@@ -208,7 +259,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			//assemble files if bytes of whole file has uploaded
 			if end == file_size {
 				//query all file blocks
-				rac := common.NewRestApiClient("GET", x.GetApiUrlPath("file-block")+"?server_file_id="+server_file_id, nil, false).SetAuthHeader(auth.GetToken())
+				rac := common.NewRestApiClient("GET", x.GetApiUrlPath("file-block")+"?server_file_id="+server_file_id, nil, false)
 				resp, err := rac.Do()
 				if err != nil {
 					panic(err)
@@ -252,7 +303,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 					panic(err)
 				}
 				//change status
-				rac = common.NewRestApiClient("PUT", x.GetApiUrlPath("file"), []byte(fmt.Sprintf("server_file_id=%s", server_file_id)), false).SetAuthHeader(auth.GetToken())
+				rac = common.NewRestApiClient("PUT", x.GetApiUrlPath("file"), []byte(fmt.Sprintf("server_file_id=%s", server_file_id)), false)
 				_, err = rac.Do()
 				if err != nil {
 					panic(err)

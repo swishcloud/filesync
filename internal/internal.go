@@ -10,6 +10,8 @@ type globalConfig struct {
 	AuthCodeUrl      string
 }
 
+const TokenHeaderKey = "access_token"
+
 var gc *globalConfig
 
 func GlobalConfig() *globalConfig {
