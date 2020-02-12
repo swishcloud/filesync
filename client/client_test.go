@@ -10,7 +10,7 @@ import (
 )
 
 func runSimpleServer() {
-	server := server.NewFileSyncServer("3000", "/root/Desktop/root1", "", "", true)
+	server := server.NewFileSyncServer("3000", "/root/Desktop/root", "", "", true)
 	go server.Serve()
 	time.Sleep(time.Millisecond * 100)
 }
@@ -24,7 +24,7 @@ func Test_Download_File(t *testing.T) {
 
 func Test_Send_File(t *testing.T) {
 	runSimpleServer()
-	err := client.SendFile("/root/Desktop/root1/F/large file (copy).zip", true)
+	err := client.SendFile("/root/Desktop/large file.zip", true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,8 @@
 package internal
 
-import "os"
+import (
+	"os"
+)
 
 type globalConfig struct {
 	BaseApiUrlPath   string

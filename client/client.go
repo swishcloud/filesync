@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -92,11 +93,11 @@ func SendFile(file_path string, skip_tls_verify bool) error {
 		}
 		m := common.ReadAsMap(resp.Body)
 		if m["error"] != nil {
-			panic(m["error"].(string))
+			return errors.New(m["error"].(string))
 		}
 		data = getFileData(name, md5, skip_tls_verify)
 		if data == nil {
-			panic("still no file record")
+			return errors.New("still no file record")
 		}
 		is_completed = data["Is_completed"].(bool)
 		if is_completed {
@@ -119,7 +120,7 @@ func SendFile(file_path string, skip_tls_verify bool) error {
 
 	conn, err := net.Dial("tcp", ip+":"+strconv.FormatInt(port, 10))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	s := session.NewSession(conn)
 	_, err = f.Seek(uploaded_size, 1)

@@ -10,29 +10,42 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/swishcloud/filesync/message"
 	"github.com/swishcloud/filesync/x"
+	"github.com/swishcloud/gostudy/common"
 )
 
 type Session struct {
-	_c            net.Conn
-	written       int64
-	read          int64
-	last_msg_rest int64
+	_c                   net.Conn
+	written              int64
+	read                 int64
+	last_msg_rest        int64
+	presentWriteProgress PresentWriteProgress
+	write_speed_n        int64
+	closed               bool
 }
+type PresentWriteProgress func(n int)
 
 func NewSession(c net.Conn) *Session {
 	s := new(Session)
 	s._c = c
+	go s.speedTimer()
 	return s
 }
-
+func (s *Session) speedTimer() {
+	for !s.closed {
+		time.Sleep(time.Second * 1)
+		s.write_speed_n = 0
+	}
+}
 func (s *Session) Close() {
 	err := s._c.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
+	s.closed = true
 }
 func (s *Session) ReadMessage() (*message.Message, error) {
 	if s.last_msg_rest != 0 {
@@ -71,7 +84,11 @@ func (s *Session) ReadMessage() (*message.Message, error) {
 }
 func (s *Session) Write(p []byte) (n int, err error) {
 	n, err = s._c.Write(p)
+	if s.presentWriteProgress != nil {
+		s.presentWriteProgress(n)
+	}
 	s.written += int64(n)
+	s.write_speed_n += int64(n)
 	return n, err
 }
 func (s *Session) Read(p []byte) (n int, err error) {
@@ -111,10 +128,21 @@ func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_s
 		return err
 	}
 	if payload != nil {
+		written := int64(0)
+		total := msg.BodySize
+		s.presentWriteProgress = func(n int) {
+			written += int64(n)
+			percent := int(float64(written) / float64(total) * 100)
+			s, u := common.FormatByteSize(s.write_speed_n)
+			fmt.Print("\r")
+			fmt.Printf("sent %d/%d bytes %d%%,%s %s/s", written, total, percent, s, u)
+		}
 		n, err := io.CopyN(s, payload, msg.BodySize)
 		if err != nil {
 			return err
 		}
+		s.presentWriteProgress = nil
+		fmt.Println()
 		if n != payload_size {
 			return errors.New(fmt.Sprintf("unexpected error:payload size is %d bytes,but written %d bytes", payload_size, n))
 		}
