@@ -135,14 +135,16 @@ func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_s
 			percent := int(float64(written) / float64(total) * 100)
 			s, u := common.FormatByteSize(s.write_speed_n)
 			fmt.Print("\r")
-			fmt.Printf("sent %d/%d bytes %d%%,%s %s/s", written, total, percent, s, u)
+			info := fmt.Sprintf("sent %d/%d bytes %d%%,%s %s/s               ", written, total, percent, s, u)
+			info = common.StringLimitLen(info, 50)
+			fmt.Print(info)
 		}
 		n, err := io.CopyN(s, payload, msg.BodySize)
+		fmt.Println()
+		s.presentWriteProgress = nil
 		if err != nil {
 			return err
 		}
-		s.presentWriteProgress = nil
-		fmt.Println()
 		if n != payload_size {
 			return errors.New(fmt.Sprintf("unexpected error:payload size is %d bytes,but written %d bytes", payload_size, n))
 		}

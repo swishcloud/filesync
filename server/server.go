@@ -193,8 +193,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			}
 			written, err := io.CopyN(f, session, msg.BodySize)
 			if err != nil {
-				log.Println("receive file block failed")
-				panic(err)
+				log.Println("receive file block failed:", err)
 			} else {
 				log.Println("received a new file block")
 			}
