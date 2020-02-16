@@ -179,30 +179,31 @@ func checkFile(file models.File, fullPath string) {
 		}
 	}
 }
-func (s *FileSyncServer) checkToken(msg *message.Message) (user_id string, err error) {
-	token := msg.Header[internal.TokenHeaderKey]
-	if token == nil {
-		return "", errors.New("token is missing")
+func (s *FileSyncServer) checkToken(msg *message.Message) (user_id string, token *oauth2.Token, err error) {
+	tokenstr := msg.Header[internal.TokenHeaderKey]
+	if tokenstr == nil {
+		return "", nil, errors.New("token is missing")
 	}
-	rar := common.NewRestApiRequest("GET", s.config.IntrospectTokenURL, nil).SetAuthHeader(&oauth2.Token{AccessToken: token.(string)})
+	token = &oauth2.Token{AccessToken: tokenstr.(string)}
+	rar := common.NewRestApiRequest("GET", s.config.IntrospectTokenURL, nil).SetAuthHeader(token)
 	resp, err := internal.RestApiClient().Do(rar)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	m, err := common.ReadAsMap(resp.Body)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if m["error"] != nil {
-		return "", errors.New(m["error"].(string))
+		return "", nil, errors.New(m["error"].(string))
 	}
 	data := m["data"].(map[string]interface{})
 	isActive := data["active"].(bool)
 	if !isActive {
-		return "", errors.New("the token is not valid")
+		return "", nil, errors.New("the token is not valid")
 	}
 	sub := data["sub"].(string)
-	return sub, nil
+	return sub, token, nil
 }
 func (s *FileSyncServer) serveSession(c net.Conn) {
 	session := session.NewSession(c)
@@ -224,7 +225,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			reply_msg.MsgType = message.MT_PANG
 			session.SendMessage(reply_msg, nil, 0)
 		case message.MT_FILE:
-			_, err := s.checkToken(msg)
+			_, token, err := s.checkToken(msg)
 			if err != nil {
 				panic(err)
 			}
@@ -235,7 +236,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			if err != nil {
 				panic(err)
 			}
-			data, err := internal.GetFileData(file_name, md5, directory_path, is_hidden)
+			data, err := internal.GetFileData(file_name, md5, directory_path, is_hidden, token)
 			if err != nil {
 				panic(err)
 			}

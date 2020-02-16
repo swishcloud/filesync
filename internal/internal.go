@@ -8,6 +8,7 @@ import (
 
 	"github.com/swishcloud/filesync/auth"
 	"github.com/swishcloud/gostudy/common"
+	"golang.org/x/oauth2"
 )
 
 type globalConfig struct {
@@ -36,17 +37,13 @@ func GlobalConfig() *globalConfig {
 	return gc
 }
 
-func GetFileData(file_name, md5, directory_path string, is_hidden bool) (map[string]interface{}, error) {
+func GetFileData(file_name, md5, directory_path string, is_hidden bool, token *oauth2.Token) (map[string]interface{}, error) {
 	params := url.Values{}
 	params.Add("md5", md5)
 	params.Add("name", file_name)
 	params.Add("directory_path", directory_path)
 	params.Add("is_hidden", strconv.FormatBool(is_hidden))
 	url := GlobalConfig().BaseApiUrlPath + "file" + "?" + params.Encode()
-	token, err := auth.GetToken()
-	if err != nil {
-		return nil, err
-	}
 	rar := common.NewRestApiRequest("GET", url, nil).SetAuthHeader(token)
 	resp, err := rac.Do(rar)
 	if err != nil {

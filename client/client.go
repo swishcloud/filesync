@@ -71,7 +71,7 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 	}
 	msg.Header[internal.TokenHeaderKey] = token.AccessToken
 
-	data, err := internal.GetFileData(name, md5, directory_path, is_hidden)
+	data, err := internal.GetFileData(name, md5, directory_path, is_hidden, token)
 	if err != nil {
 		return err
 	}
@@ -97,7 +97,7 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 		if m["error"] != nil {
 			return errors.New(m["error"].(string))
 		}
-		data, err = internal.GetFileData(name, md5, directory_path, is_hidden)
+		data, err = internal.GetFileData(name, md5, directory_path, is_hidden, token)
 		if err != nil {
 			return err
 		}
