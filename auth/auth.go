@@ -9,13 +9,13 @@ import (
 
 const token_save_path = ".cache/token"
 
-func GetToken() *oauth2.Token {
+func GetToken() (*oauth2.Token, error) {
 	b, err := ioutil.ReadFile(token_save_path)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	tokenstr := string(b)
-	return &oauth2.Token{AccessToken: tokenstr}
+	return &oauth2.Token{AccessToken: tokenstr}, nil
 }
 
 func SaveToken(tokenstr string) {

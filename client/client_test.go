@@ -24,7 +24,7 @@ func Test_Download_File(t *testing.T) {
 
 func Test_Send_File(t *testing.T) {
 	runSimpleServer()
-	err := client.SendFile("/root/Desktop/large file.zip", true)
+	err := client.SendFile("/root/Desktop/large file.zip", "", true)
 	if err != nil {
 		t.Fatal(err)
 	}

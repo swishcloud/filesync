@@ -15,22 +15,30 @@ import (
 var loginCmd = &cobra.Command{
 	Use: "login",
 	Run: func(cmd *cobra.Command, args []string) {
-		rac := common.NewRestApiClient("GET", internal.GlobalConfig().AuthCodeUrl+"?state="+uuid.New().String(), nil, skip_tls_verify)
-		resp, err := rac.DoExpect200Status()
+		rar := common.NewRestApiRequest("GET", internal.GlobalConfig().AuthCodeUrl+"?state="+uuid.New().String(), nil)
+		resp, err := internal.RestApiClient().Do(rar)
 		if err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
-		url := common.ReadAsMap(resp.Body)["data"].(string)
+		m, err := common.ReadAsMap(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		url := m["data"].(string)
 		fmt.Println("copy this url then open in browser:", url)
 		fmt.Print("Enter authenfication code:")
 		code := ""
 		fmt.Scan(&code)
-		rac = common.NewRestApiClient("POST", internal.GlobalConfig().ExchangeTokenUrl, []byte("code="+code), skip_tls_verify)
-		resp, err = rac.DoExpect200Status()
+		rar = common.NewRestApiRequest("POST", internal.GlobalConfig().ExchangeTokenUrl, []byte("code="+code))
+		resp, err = internal.RestApiClient().Do(rar)
 		if err != nil {
 			panic(err)
 		}
-		token := common.ReadAsMap(resp.Body)["data"].(string)
+		m, err = common.ReadAsMap(resp.Body)
+		if err != nil {
+			log.Fatal(err)
+		}
+		token := m["data"].(string)
 		log.Println("exchanged token:", token)
 		auth.SaveToken(token)
 

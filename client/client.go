@@ -44,26 +44,7 @@ func Ping(server string) {
 	}
 	fmt.Println("server status is ok")
 }
-func getFileData(file_name, md5 string, skip_tls_verify bool) map[string]interface{} {
-	params := url.Values{}
-	params.Add("md5", md5)
-	params.Add("name", file_name)
-	url := x.GetApiUrlPath("file") + "?" + params.Encode()
-	rac := common.NewRestApiClient("GET", url, nil, skip_tls_verify)
-	resp, err := rac.Do()
-	if err != nil {
-		panic(err)
-	}
-	m := common.ReadAsMap(resp.Body)
-	if m["error"] != nil {
-		panic(m["error"].(string))
-	}
-	if m["data"] == nil {
-		return nil
-	}
-	return m["data"].(map[string]interface{})
-}
-func SendFile(file_path string, skip_tls_verify bool) error {
+func SendFile(file_path, directory_path string, is_hidden bool) error {
 	msg := message.NewMessage(message.MT_FILE)
 	md5, err := x.Hash_file_md5(file_path)
 	if err != nil {
@@ -82,25 +63,43 @@ func SendFile(file_path string, skip_tls_verify bool) error {
 	size := file_info.Size()
 	msg.Header["md5"] = md5
 	msg.Header["file_name"] = name
-	msg.Header[internal.TokenHeaderKey] = auth.GetToken().AccessToken
+	msg.Header["directory_path"] = directory_path
+	msg.Header["is_hidden"] = strconv.FormatBool(is_hidden)
+	token, err := auth.GetToken()
+	if err != nil {
+		return err
+	}
+	msg.Header[internal.TokenHeaderKey] = token.AccessToken
 
-	data := getFileData(file_info.Name(), md5, skip_tls_verify)
+	data, err := internal.GetFileData(name, md5, directory_path, is_hidden)
+	if err != nil {
+		return err
+	}
 	is_completed := false
 	reused := false
 	if data == nil {
 		//need to insert file record
-		rac := common.NewRestApiClient("POST", x.GetApiUrlPath("file"), []byte("name="+name+"&md5="+md5+"&size="+strconv.FormatInt(size, 10)), false).SetAuthHeader(auth.GetToken())
-		resp, err := rac.Do()
+		insert_parameters := url.Values{}
+		insert_parameters.Add("name", name)
+		insert_parameters.Add("md5", md5)
+		insert_parameters.Add("size", strconv.FormatInt(size, 10))
+		insert_parameters.Add("directory_path", directory_path)
+		insert_parameters.Add("is_hidden", strconv.FormatBool(is_hidden))
+		rar := common.NewRestApiRequest("POST", x.GetApiUrlPath("file"), []byte(insert_parameters.Encode())).SetAuthHeader(token)
+		resp, err := internal.RestApiClient().Do(rar)
 		if err != nil {
-			panic(err)
+			return err
 		}
-		m := common.ReadAsMap(resp.Body)
+		m, err := common.ReadAsMap(resp.Body)
+		if err != nil {
+			return err
+		}
 		if m["error"] != nil {
 			return errors.New(m["error"].(string))
 		}
-		data = getFileData(name, md5, skip_tls_verify)
-		if data == nil {
-			return errors.New("still no file record")
+		data, err = internal.GetFileData(name, md5, directory_path, is_hidden)
+		if err != nil {
+			return err
 		}
 		is_completed = data["Is_completed"].(bool)
 		if is_completed {
@@ -143,12 +142,19 @@ func SendFile(file_path string, skip_tls_verify bool) error {
 }
 
 func DownloadFile(file_id string, skip_tls_verify bool) error {
-	rac := common.NewRestApiClient("GET", x.GetApiUrlPath("file")+"?file_id="+file_id, nil, skip_tls_verify)
-	resp, err := rac.Do()
+	token, err := auth.GetToken()
 	if err != nil {
-		panic(err)
+		return err
 	}
-	m := common.ReadAsMap(resp.Body)
+	rar := common.NewRestApiRequest("GET", internal.GetApiUrlPath("file")+"?file_id="+file_id, nil).SetAuthHeader(token)
+	resp, err := internal.RestApiClient().Do(rar)
+	if err != nil {
+		return err
+	}
+	m, err := common.ReadAsMap(resp.Body)
+	if err != nil {
+		return err
+	}
 	if m["error"] != nil {
 		panic(m["error"].(string))
 	}

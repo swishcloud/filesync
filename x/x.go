@@ -3,14 +3,12 @@ package x
 import (
 	"bytes"
 	"crypto/md5"
-	"crypto/tls"
 	"encoding/gob"
 	"encoding/hex"
 	"errors"
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/swishcloud/filesync/internal"
@@ -83,11 +81,6 @@ func PathExist(file_path string) bool {
 
 func GetApiUrlPath(p string) string {
 	return internal.GlobalConfig().BaseApiUrlPath + p
-}
-func DefaultClient() *http.Client {
-	client := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
-	http.DefaultClient = client
-	return client
 }
 func LogReader(prefix string, r io.Reader) {
 	b, err := ioutil.ReadAll(r)

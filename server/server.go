@@ -42,6 +42,16 @@ type config struct {
 	FileLocation       string `yaml:"FileLocation"`
 }
 
+func (cfg *config) blockDir() string {
+	return cfg.FileLocation + "/block/"
+}
+func (cfg *config) fileDir() string {
+	return cfg.FileLocation + "/file/"
+}
+func (cfg *config) tempDir() string {
+	return cfg.FileLocation + "/tmp/"
+}
+
 func NewFileSyncServer(config_file_path string, skip_tls_verify bool) *FileSyncServer {
 	s := &FileSyncServer{}
 	s.skip_tls_verify = skip_tls_verify
@@ -53,6 +63,18 @@ func NewFileSyncServer(config_file_path string, skip_tls_verify bool) *FileSyncS
 		log.Fatal(err)
 	}
 	err = yaml.Unmarshal(b, s.config)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.MkdirAll(s.config.blockDir(), os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.MkdirAll(s.config.fileDir(), os.ModePerm)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = os.MkdirAll(s.config.tempDir(), os.ModePerm)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -157,36 +179,17 @@ func checkFile(file models.File, fullPath string) {
 		}
 	}
 }
-func getFileData(file_name, md5 string) map[string]interface{} {
-	params := url.Values{}
-	params.Add("md5", md5)
-	params.Add("name", file_name)
-	url := x.GetApiUrlPath("file") + "?" + params.Encode()
-	rac := common.NewRestApiClient("GET", url, nil, true)
-	resp, err := rac.Do()
-	if err != nil {
-		panic(err)
-	}
-	m := common.ReadAsMap(resp.Body)
-	if m["error"] != nil {
-		panic(m["error"].(string))
-	}
-	if m["data"] == nil {
-		return nil
-	}
-	return m["data"].(map[string]interface{})
-}
 func (s *FileSyncServer) checkToken(msg *message.Message) (user_id string, err error) {
 	token := msg.Header[internal.TokenHeaderKey]
 	if token == nil {
 		return "", errors.New("token is missing")
 	}
-	rac := common.NewRestApiClient("GET", s.config.IntrospectTokenURL, nil, s.skip_tls_verify).SetAuthHeader(&oauth2.Token{AccessToken: token.(string)})
-	resp, err := rac.DoExpect200Status()
+	rar := common.NewRestApiRequest("GET", s.config.IntrospectTokenURL, nil).SetAuthHeader(&oauth2.Token{AccessToken: token.(string)})
+	resp, err := internal.RestApiClient().Do(rar)
 	if err != nil {
 		return "", err
 	}
-	m := common.ReadAsMap(resp.Body)
+	m, err := common.ReadAsMap(resp.Body)
 	if err != nil {
 		return "", err
 	}
@@ -227,13 +230,22 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			}
 			file_name := msg.Header["file_name"].(string)
 			md5 := msg.Header["md5"].(string)
-			data := getFileData(file_name, md5)
-			file_path := path.Join(s.Storage.root, data["Path"].(string))
+			directory_path := msg.Header["directory_path"].(string)
+			is_hidden, err := strconv.ParseBool(msg.Header["is_hidden"].(string))
+			if err != nil {
+				panic(err)
+			}
+			data, err := internal.GetFileData(file_name, md5, directory_path, is_hidden)
+			if err != nil {
+				panic(err)
+			}
+			file_path := s.config.fileDir() + data["Path"].(string)
 			server_file_id := data["Server_file_id"].(string)
 			uploaded_size := int64(data["Uploaded_size"].(float64))
 			file_size := int64(data["Size"].(float64))
 			block_name := uuid.New().String()
-			f, err := os.Create(path.Join(s.Storage.root, block_name))
+			block_path := s.config.blockDir() + block_name
+			f, err := os.Create(block_path)
 			if err != nil {
 				panic(err)
 			}
@@ -251,23 +263,26 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			parameters.Add("name", block_name)
 			parameters.Add("start", strconv.FormatInt(start, 10))
 			parameters.Add("end", strconv.FormatInt(end, 10))
-			rac := common.NewRestApiClient("POST", x.GetApiUrlPath("file-block"), []byte(parameters.Encode()), false)
-			_, err = rac.Do()
+			rar := common.NewRestApiRequest("POST", internal.GetApiUrlPath("file-block"), []byte(parameters.Encode()))
+			_, err = internal.RestApiClient().Do(rar)
 			if err != nil {
 				panic(err)
 			}
 			//assemble files if bytes of whole file has uploaded
 			if end == file_size {
 				//query all file blocks
-				rac := common.NewRestApiClient("GET", x.GetApiUrlPath("file-block")+"?server_file_id="+server_file_id, nil, false)
-				resp, err := rac.Do()
+				rar := common.NewRestApiRequest("GET", internal.GetApiUrlPath("file-block")+"?server_file_id="+server_file_id, nil)
+				resp, err := internal.RestApiClient().Do(rar)
 				if err != nil {
 					panic(err)
 				}
-				m := common.ReadAsMap(resp.Body)
+				m, err := common.ReadAsMap(resp.Body)
+				if err != nil {
+					panic(err)
+				}
 				data := m["data"].([]interface{})
 				//create temp file
-				temp_file_path := path.Join(s.Storage.root, uuid.New().String()+".tmp")
+				temp_file_path := s.config.tempDir() + uuid.New().String()
 				temp_file, err := os.Create(temp_file_path)
 				if err != nil {
 					panic(err)
@@ -276,7 +291,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 					block := data[i].(map[string]interface{})
 					log.Println(block)
 					block_path := block["Path"].(string)
-					block_file, err := os.Open(path.Join(s.Storage.root, block_path))
+					block_file, err := os.Open(s.config.blockDir() + block_path)
 					if err != nil {
 						panic(err)
 					}
@@ -303,8 +318,8 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 					panic(err)
 				}
 				//change status
-				rac = common.NewRestApiClient("PUT", x.GetApiUrlPath("file"), []byte(fmt.Sprintf("server_file_id=%s", server_file_id)), false)
-				_, err = rac.Do()
+				rar = common.NewRestApiRequest("PUT", internal.GetApiUrlPath("file"), []byte(fmt.Sprintf("server_file_id=%s", server_file_id)))
+				_, err = internal.RestApiClient().Do(rar)
 				if err != nil {
 					panic(err)
 				}
@@ -314,7 +329,7 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 		case message.MT_Request_Repeat:
 		case message.MT_Download_File:
 			file_path := msg.Header["path"].(string)
-			err = session.SendFile(path.Join(s.Storage.root, file_path), nil)
+			err = session.SendFile(path.Join(s.config.fileDir(), file_path), nil)
 			if err != nil {
 				panic(err)
 			}
