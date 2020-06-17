@@ -11,18 +11,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
-	"path/filepath"
 	"strconv"
-	"strings"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/swishcloud/filesync/internal"
+	"github.com/swishcloud/filesync/storage"
 
 	"golang.org/x/oauth2"
 	"gopkg.in/yaml.v2"
 
-	"github.com/google/uuid"
 	"github.com/swishcloud/filesync/message"
 	"github.com/swishcloud/filesync/message/models"
 	"github.com/swishcloud/filesync/session"
@@ -32,9 +29,16 @@ import (
 
 type FileSyncServer struct {
 	config          *config
-	Storage         *Storage
 	skip_tls_verify bool
 	httpClient      *http.Client
+	storage         *storage.SQLITEManager
+	clients         []*client
+	connect         chan *session.Session
+	disconnect      chan *session.Session
+}
+type client struct {
+	session *session.Session
+	class   int
 }
 type config struct {
 	IntrospectTokenURL string `yaml:"IntrospectTokenURL"`
@@ -54,6 +58,11 @@ func (cfg *config) tempDir() string {
 
 func NewFileSyncServer(config_file_path string, skip_tls_verify bool) *FileSyncServer {
 	s := &FileSyncServer{}
+	s.storage = &storage.SQLITEManager{}
+	s.clients = []*client{}
+	s.connect = make(chan *session.Session)
+	s.disconnect = make(chan *session.Session)
+	s.storage.Initialize()
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
@@ -78,7 +87,6 @@ func NewFileSyncServer(config_file_path string, skip_tls_verify bool) *FileSyncS
 	if err != nil {
 		log.Fatal(err)
 	}
-	s.Storage = NewStorage(s.config.FileLocation, "")
 	return s
 }
 func (s *FileSyncServer) Serve() {
@@ -90,87 +98,17 @@ func (s *FileSyncServer) Serve() {
 		log.Fatal(err)
 	}
 	defer l.Close()
-	go s.StartRepeat()
+	// Handle the sessions in a new goroutine.
+	go s.serveSessions()
 	for {
 		// Wait for a connection.
 		conn, err := l.Accept()
 		if err != nil {
 			log.Fatal(err)
 		}
-		// Handle the connection in a new goroutine.
-		// The loop then returns to accepting, so that
-		// multiple connections may be served concurrently.
-		go s.serveSession(conn)
+		s.connect <- session.NewSession(conn)
 	}
 }
-
-func (s *FileSyncServer) StartRepeat() {
-	for {
-		s.startRepeat()
-		time.Sleep(time.Second * 60 * 3)
-	}
-}
-func (server *FileSyncServer) startRepeat() {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("repeating failed,cause:%s", err)
-		}
-	}()
-	// if server.Repeat != "" {
-	// 	log.Println("start repeating data from server addr:", server.Repeat)
-	// 	conn, err := net.Dial("tcp", server.Repeat)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	log.Println("connected successfully", server.Repeat)
-	// 	s := session.NewSession(conn)
-	// 	msg := new(message.Message)
-	// 	msg.MsgType = message.MT_Get_All_Files
-	// 	reply, err := s.Fetch(msg, nil)
-	// 	if err != nil {
-	// 		panic(err)
-	// 	}
-	// 	files := []models.File{}
-	// 	s.ReadJson(int(reply.BodySize), &files)
-	// 	log.Println("got file list:", files)
-	// 	for i := 0; i < len(files); i++ {
-	// 		fileName := files[i].Path
-	// 		file_path := path.Join(server.Storage.root, fileName)
-	// 		if x.PathExist(file_path) {
-	// 			log.Printf("%s exists,skip", file_path)
-	// 			continue
-	// 		}
-	// 		if files[i].IsFolder {
-	// 			err = os.Mkdir(file_path, os.ModePerm)
-	// 			if err != nil {
-	// 				panic(err)
-	// 			}
-	// 			log.Println("create folder:", file_path)
-	// 			checkFile(files[i], file_path)
-	// 			continue
-	// 		}
-	// 		msg.MsgType = message.MT_Download_File
-	// 		err := s.Send(msg, fileName)
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-	// 		reply, err := s.ReadMessage()
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-	// 		log.Println("downloading file:", fileName)
-	// 		_, err = s.ReadFile(file_path, reply.Header["md5"].(string), reply.BodySize)
-	// 		if err != nil {
-	// 			panic(err)
-	// 		}
-	// 		checkFile(files[i], file_path)
-	// 		log.Println("received file:", fileName)
-	// 	}
-	// 	s.Close()
-	// 	log.Println("finished repeating")
-	// }
-}
-
 func checkFile(file models.File, fullPath string) {
 	if file.IsHidden {
 		err := x.HideFile(fullPath)
@@ -205,12 +143,30 @@ func (s *FileSyncServer) checkToken(msg *message.Message) (user_id string, token
 	sub := data["sub"].(string)
 	return sub, token, nil
 }
-func (s *FileSyncServer) serveSession(c net.Conn) {
-	session := session.NewSession(c)
+func (s *FileSyncServer) serveSessions() {
+	for {
+		select {
+		case connect := <-s.connect:
+			client := &client{session: connect, class: 1}
+			s.clients = append(s.clients, client)
+			go s.serveClient(client)
+		case disconect := <-s.disconnect:
+			disconect.Close()
+			for index, item := range s.clients {
+				if item.session == disconect {
+					s.clients = append(s.clients[:index], s.clients[index+1:]...)
+					break
+				}
+			}
+		}
+	}
+}
+func (s *FileSyncServer) serveClient(client *client) {
+	session := client.session
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("close session:", session, "cause:", err)
-			session.Close()
+			log.Println("disconnect session:", session, "cause:", err)
+			s.disconnect <- session
 		}
 	}()
 	log.Println("New session:", session)
@@ -329,80 +285,14 @@ func (s *FileSyncServer) serveSession(c net.Conn) {
 			session.Send(reply, nil)
 		case message.MT_Request_Repeat:
 		case message.MT_Download_File:
-			file_path := msg.Header["path"].(string)
-			err = session.SendFile(path.Join(s.config.fileDir(), file_path), nil)
-			if err != nil {
-				panic(err)
-			}
-			log.Println("sent file:", file_path)
-		case message.MT_Get_All_Files:
-			files, err := s.Storage.GetFiles(s.Storage.root, "")
-			if err != nil {
-				panic(err)
-			}
-			reply_msg := new(message.Message)
-			reply_msg.MsgType = message.MT_Reply
-
-			err = session.Send(reply_msg, files)
-			if err != nil {
-				panic(err)
-			}
+			file_path := s.config.fileDir() + msg.Header["path"].(string)
+			session.SendFile(file_path, func(filename string, md5 string, size int64) (int64, bool) {
+				return 0, true
+			})
 		case message.MT_DISCONNECT:
 			panic(errors.New("peer requested to disconnect connections"))
-		}
+		case message.MT_SYNC:
 
-	}
-}
-
-type Storage struct {
-	root    string
-	filters []string
-}
-
-//s.Ack()
-func NewStorage(root, filters string) *Storage {
-	storage := new(Storage)
-	storage.root = root
-	if filters != "" {
-		storage.filters = strings.Split(filters, ";")
-	} else {
-		storage.filters = []string{}
-	}
-	return storage
-}
-func (s *Storage) Ignore(path string) bool {
-	for i := 0; i < len(s.filters); i++ {
-		if filepath.Base(path) == s.filters[i] {
-			return true
 		}
 	}
-	return false
-}
-func (s *Storage) GetFiles(p string, prefix string) ([]models.File, error) {
-	fileInfos, err := ioutil.ReadDir(p)
-	if err != nil {
-		return nil, err
-	}
-	files := []models.File{}
-	for i := 0; i < len(fileInfos); i++ {
-		file := models.File{IsFolder: fileInfos[i].IsDir(), Path: prefix + fileInfos[i].Name()}
-		fullPath := s.root + "/" + file.Path
-		if s.Ignore(fullPath) {
-			log.Printf("Ignore file or directory:%s", fullPath)
-			continue
-		}
-		file.IsHidden, err = x.IsHidden(fullPath)
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, file)
-		if file.IsFolder {
-			fs, err := s.GetFiles(fullPath, file.Path+"/")
-			if err != nil {
-				return nil, err
-			}
-			files = append(files, fs...)
-		}
-	}
-	return files, nil
 }

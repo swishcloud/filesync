@@ -7,11 +7,12 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/swishcloud/filesync/internal"
-
-	"github.com/swishcloud/filesync/auth"
 	"github.com/swishcloud/filesync/message"
 	"github.com/swishcloud/filesync/x"
 	"github.com/swishcloud/gostudy/common"
@@ -65,7 +66,7 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 	msg.Header["file_name"] = name
 	msg.Header["directory_path"] = directory_path
 	msg.Header["is_hidden"] = strconv.FormatBool(is_hidden)
-	token, err := auth.GetToken()
+	token, err := internal.GetToken()
 	if err != nil {
 		return err
 	}
@@ -77,7 +78,19 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 	}
 	is_completed := false
 	reused := false
+	need_create_file := false
 	if data == nil {
+		need_create_file = true
+	} else {
+		if strings.Trim(data["Md5"].(string), " ") != md5 {
+			need_create_file = true
+			//default to delete the existing file
+			if err := internal.DeleteFile(data["File_id"].(string)); err != nil {
+				return err
+			}
+		}
+	}
+	if need_create_file {
 		//need to insert file record
 		insert_parameters := url.Values{}
 		insert_parameters.Add("name", name)
@@ -119,12 +132,10 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 	}
 	uploaded_size := int64(data["Uploaded_size"].(float64))
 	fmt.Println("ready to upload")
-
-	conn, err := net.Dial("tcp", ip+":"+strconv.FormatInt(port, 10))
+	s, err := sessionFactory(ip + ":" + strconv.FormatInt(port, 10))
 	if err != nil {
 		return err
 	}
-	s := session.NewSession(conn)
 	_, err = f.Seek(uploaded_size, 1)
 	if err != nil {
 		return err
@@ -140,9 +151,74 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 	fmt.Println("successfully uploaded")
 	return nil
 }
+func TransferDirectory(path string, pre_transfer func(path string) (ok bool)) error {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+	path = strings.ReplaceAll(path, "\\", "/")
+	path = strings.TrimSuffix(path, "/")
+	p_path := regexp.MustCompile(".*/").FindString(path)
+	items := []*common.FileInfoWrapper{}
+	err = common.ReadAllFiles(path, &items)
+	if err != nil {
+		return err
+	}
+	failureNum := 0
+	skipNum := 0
+	for index, item := range items {
+		location := strings.Replace(item.Path, p_path, "", 1)
+		location = regexp.MustCompile(".*/").FindString(location)
+		location = strings.TrimSuffix(location, "/")
+		fmt.Println("target location:", location)
+		is_hidden, err := x.IsHidden(item.Path)
+		if err != nil {
+			log.Printf(err.Error())
+			failureNum++
+		} else {
+			if !pre_transfer(item.Path) {
+				skipNum++
+				fmt.Printf("skiped %s\r\n", item.Path)
+				continue
+			}
+			if item.Fi.IsDir() {
+				fmt.Printf("found folder '%s'\r\n", item.Path)
+				//ensure directory already created
+				if err := internal.CreateDirectory(location, item.Fi.Name(), is_hidden); err != nil {
+					failureNum++
+					return err
+				}
+			} else {
+				fmt.Printf("uploading file '%s'\r\n", item.Path)
+				err = SendFile(item.Path, location, is_hidden)
+				if err != nil {
+					log.Printf(err.Error())
+					failureNum++
+				}
+			}
+		}
+		fmt.Printf("progress: %d/%d failure:%d skip:%d\r\n", index+1, len(items), failureNum, skipNum)
+	}
+	return nil
+}
 
-func DownloadFile(file_id string, skip_tls_verify bool) error {
-	token, err := auth.GetToken()
+var sessions map[string]*session.Session = map[string]*session.Session{}
+
+func sessionFactory(addr string) (*session.Session, error) {
+	if sessions[addr] == nil {
+		log.Println("create new tcp connection to " + addr)
+		conn, err := net.Dial("tcp", addr)
+		if err != nil {
+			return nil, err
+		}
+		s := session.NewSession(conn)
+		sessions[addr] = s
+	}
+	return sessions[addr], nil
+}
+
+func DownloadFile(file_id string, save_path string) error {
+	token, err := internal.GetToken()
 	if err != nil {
 		return err
 	}
@@ -156,7 +232,7 @@ func DownloadFile(file_id string, skip_tls_verify bool) error {
 		return err
 	}
 	if m["error"] != nil {
-		panic(m["error"].(string))
+		return errors.New(m["error"].(string))
 	}
 	data := m["data"].(map[string]interface{})
 	Ip := data["Ip"].(string)
@@ -167,20 +243,23 @@ func DownloadFile(file_id string, skip_tls_verify bool) error {
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	s := session.NewSession(conn)
 	msg := message.NewMessage(message.MT_Download_File)
 	msg.Header["path"] = Path
+	msg.Header[internal.TokenHeaderKey] = token.AccessToken
 	file_msg, err := s.Fetch(msg, nil)
 	if err != nil {
 		return err
 	}
-	filepath := file_name
-	_, err = s.ReadFile(filepath, file_msg.Header["md5"].(string), file_msg.BodySize)
-	if err != nil {
-		panic(err)
+	if save_path == "" {
+		save_path = file_name
 	}
-	log.Println("downloaded file:", file_name)
+	_, err = s.ReadFile(save_path, file_msg.Header["md5"].(string), file_msg.BodySize)
+	if err != nil {
+		return err
+	}
+	log.Println("downloaded file:", save_path)
 	return nil
 }

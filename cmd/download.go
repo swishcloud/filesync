@@ -14,7 +14,7 @@ var downloadCmd = &cobra.Command{
 		if err != nil {
 			log.Println(err)
 		}
-		client.DownloadFile(file_id, skip_tls_verify)
+		client.DownloadFile(file_id, "")
 	},
 }
 

@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/swishcloud/filesync/internal"
+
 	"github.com/swishcloud/filesync/client"
 	"github.com/swishcloud/filesync/server"
 )
@@ -30,5 +32,6 @@ func Test_Send_File(t *testing.T) {
 	}
 }
 func init() {
+	internal.InitRAC(true)
 	os.Chdir("../")
 }

@@ -162,7 +162,7 @@ func (s *Session) Ack() error {
 	msg := message.NewMessage(message.MT_ACK)
 	return s.Send(msg, nil)
 }
-func (s *Session) SendFile(file_path string, pre_send func(string, string, int64) (int64, bool)) error {
+func (s *Session) SendFile(file_path string, pre_send func(filename string, md5 string, size int64) (offset int64, send bool)) error {
 	msg := message.NewMessage(message.MT_FILE)
 	md5, err := x.Hash_file_md5(file_path)
 	if err != nil {

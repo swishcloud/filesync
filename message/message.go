@@ -16,6 +16,7 @@ const (
 	MT_Reply          = 7
 	MT_Download_File  = 8
 	MT_ACK            = 9
+	MT_SYNC           = 10
 )
 
 type Message struct {

@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 
 	"github.com/swishcloud/filesync/internal"
@@ -15,6 +17,8 @@ var rootCmd = &cobra.Command{
 	Short: "filesync is file transfering server",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		internal.InitRAC(skip_tls_verify)
+		httpClient := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
+		internal.Initialize(httpClient)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("welcome to filesync")
@@ -28,5 +32,5 @@ func Execute() {
 	}
 }
 func init() {
-	rootCmd.PersistentFlags().BoolVar(&skip_tls_verify, "skip-tls-verify", false, "skip tls verify")
+	rootCmd.PersistentFlags().BoolVar(&skip_tls_verify, "insecure", false, "skip tls verify")
 }
