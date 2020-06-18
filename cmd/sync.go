@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -19,7 +20,7 @@ import (
 	"github.com/swishcloud/gostudy/common"
 )
 
-var db_file_path = "test.db"
+var db_file_path = ""
 var local_max = 0
 var syncCmd = &cobra.Command{
 	Use: "sync",
@@ -28,7 +29,8 @@ var syncCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		if true {
+		db_file_path = filepath.Join(path, "filesync.db")
+		if false {
 			_, err := os.Stat(db_file_path)
 			if !os.IsNotExist(err) {
 				err = os.Remove(db_file_path)
@@ -38,6 +40,7 @@ var syncCmd = &cobra.Command{
 			}
 			println("deleted db file")
 		}
+
 		go check_file_change(path)
 		receive(path, db_file_path)
 	},
@@ -54,9 +57,8 @@ func check_file_change(rootpath string) {
 }
 func receive(rootpath string, db_file_path string) {
 	for {
-		addr := ":2003"
-		log.Println("create new tcp connection to " + addr)
-		conn, err := net.Dial("tcp", addr)
+		log.Println("create new tcp connection to " + internal.GlobalConfig().WebServerTcpAddess)
+		conn, err := net.Dial("tcp", internal.GlobalConfig().WebServerTcpAddess)
 		if err != nil {
 			prepareReconnect()
 			continue
