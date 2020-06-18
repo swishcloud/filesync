@@ -19,8 +19,6 @@ import (
 
 type globalConfig struct {
 	BaseApiUrlPath     string
-	ExchangeTokenUrl   string
-	AuthCodeUrl        string
 	AuthUrl            string
 	TokenURL           string
 	WebServerTcpAddess string
@@ -46,17 +44,13 @@ func GlobalConfig() globalConfig {
 		gc = &globalConfig{}
 		if os.Getenv("development") == "true" {
 			gc.BaseApiUrlPath = "https://192.168.100.8:2002/api/"
-			gc.ExchangeTokenUrl = "https://192.168.100.8:2002/api/exchange_token"
-			gc.AuthCodeUrl = "https://192.168.100.8:2002/api/auth_code_url"
 			gc.AuthUrl = "https://localhost:8010/oauth2/auth"
 			gc.TokenURL = "https://localhost:8010/oauth2/token"
 			gc.WebServerTcpAddess = "localhost:2003"
 		} else {
 			gc.BaseApiUrlPath = "https://cloud.swish-cloud.com/api/"
-			gc.ExchangeTokenUrl = "https://cloud.swish-cloud.com/api/exchange_token"
-			gc.AuthCodeUrl = "https://cloud.swish-cloud.com/api/auth_code_url"
-			gc.AuthUrl = "https://cloud.swish-cloud.com/oauth2/auth"
-			gc.TokenURL = "https://cloud.swish-cloud.com/oauth2/token"
+			gc.AuthUrl = "https://id.swish-cloud.com/oauth2/auth"
+			gc.TokenURL = "https://id.swish-cloud.com/oauth2/token"
 			gc.WebServerTcpAddess = "cloud.swish-cloud.com:8007"
 		}
 	}
