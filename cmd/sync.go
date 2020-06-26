@@ -20,6 +20,7 @@ import (
 	"github.com/swishcloud/gostudy/common"
 )
 
+var local_changed = false
 var db_file_path = ""
 var local_max = 0
 var syncCmd = &cobra.Command{
@@ -29,7 +30,7 @@ var syncCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		db_file_path = filepath.Join(path, "filesync.db")
+		db_file_path = filepath.Join(filepath.Dir(path), "filesync.db")
 		if false {
 			_, err := os.Stat(db_file_path)
 			if !os.IsNotExist(err) {
@@ -48,10 +49,7 @@ var syncCmd = &cobra.Command{
 
 func check_file_change(rootpath string) {
 	for {
-		sync(rootpath)
-		if err := check_upload_local(rootpath); err != nil {
-			log.Println(err)
-		}
+		local_changed = true
 		time.Sleep(time.Second * 5)
 	}
 }
@@ -84,7 +82,15 @@ func receive(rootpath string, db_file_path string) {
 				fetch(db_file_path, local_max+1)
 				pre_sync(rootpath)
 				sync(rootpath)
-				check_upload_local(rootpath)
+				if err := check_upload_local(rootpath); err != nil {
+					log.Println(err)
+				}
+			} else if local_changed {
+				local_changed = false
+				sync(rootpath)
+				if err := check_upload_local(rootpath); err != nil {
+					log.Println(err)
+				}
 			}
 		}
 	}
