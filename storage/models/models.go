@@ -13,6 +13,13 @@ type Log struct {
 	File_md5    *string
 	File_size   *int64
 }
+type FileAction struct {
+	Path string
+	//action type:1 add.
+	ActionType int
+	Md5        string
+}
+
 type File struct {
 	Id           string
 	Name         string

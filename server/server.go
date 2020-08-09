@@ -181,25 +181,15 @@ func (s *FileSyncServer) serveClient(client *client) {
 			reply_msg.MsgType = message.MT_PANG
 			session.SendMessage(reply_msg, nil, 0)
 		case message.MT_FILE:
-			_, token, err := s.checkToken(msg)
-			if err != nil {
-				panic(err)
-			}
-			file_name := msg.Header["file_name"].(string)
+			// _, token, err := s.checkToken(msg)
+			// if err != nil {
+			// 	panic(err)
+			// }
+			file_path := s.config.fileDir() + msg.Header["path"].(string)
 			md5 := msg.Header["md5"].(string)
-			directory_path := msg.Header["directory_path"].(string)
-			is_hidden, err := strconv.ParseBool(msg.Header["is_hidden"].(string))
-			if err != nil {
-				panic(err)
-			}
-			data, err := internal.GetFileData(file_name, md5, directory_path, is_hidden, token)
-			if err != nil {
-				panic(err)
-			}
-			file_path := s.config.fileDir() + data["Path"].(string)
-			server_file_id := data["Server_file_id"].(string)
-			uploaded_size := int64(data["Uploaded_size"].(float64))
-			file_size := int64(data["Size"].(float64))
+			file_size := msg.Header["file_size"].(int64)
+			uploaded_size := msg.Header["uploaded_size"].(int64)
+			server_file_id := msg.Header["server_file_id"].(string)
 			block_name := uuid.New().String()
 			block_path := s.config.blockDir() + block_name
 			f, err := os.Create(block_path)

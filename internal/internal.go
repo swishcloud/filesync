@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -43,10 +44,10 @@ func GlobalConfig() globalConfig {
 	if gc == nil {
 		gc = &globalConfig{}
 		if os.Getenv("development") == "true" {
-			gc.BaseApiUrlPath = "https://192.168.100.8:2002/api/"
-			gc.AuthUrl = "https://localhost:8010/oauth2/auth"
-			gc.TokenURL = "https://localhost:8010/oauth2/token"
-			gc.WebServerTcpAddess = "localhost:2003"
+			gc.BaseApiUrlPath = "https://192.168.1.1:2002/api/"
+			gc.AuthUrl = "https://192.168.1.1:8010/oauth2/auth"
+			gc.TokenURL = "https://192.168.1.1:8010/oauth2/token"
+			gc.WebServerTcpAddess = "192.168.1.1:2003"
 		} else {
 			gc.BaseApiUrlPath = "https://cloud.swish-cloud.com/api/"
 			gc.AuthUrl = "https://id.swish-cloud.com/oauth2/auth"
@@ -90,6 +91,34 @@ func GetLogs(start int64) ([]models.Log, error) {
 	}
 	return result.Data, nil
 }
+
+func HttpPostFileAction(actions []models.FileAction) error {
+	b, err := json.Marshal(actions)
+	if err != nil {
+		return err
+	}
+	params := url.Values{}
+	params.Add("actions", string(b))
+	url := GlobalConfig().BaseApiUrlPath + "file"
+	token, err := GetToken()
+	if err != nil {
+		return err
+	}
+	rar := common.NewRestApiRequest("POST", url, []byte(params.Encode())).SetAuthHeader(token)
+	resp, err := rac.Do(rar)
+	if err != nil {
+		return err
+	}
+	m, err := common.ReadAsMap(resp.Body)
+	if err != nil {
+		return err
+	}
+	if m["error"] != nil {
+		return errors.New(m["error"].(string))
+	}
+	fmt.Println("all is ok")
+	return nil
+}
 func GetFileData(file_name, md5, directory_path string, is_hidden bool, token *oauth2.Token) (map[string]interface{}, error) {
 	params := url.Values{}
 	params.Add("md5", md5)
@@ -108,9 +137,6 @@ func GetFileData(file_name, md5, directory_path string, is_hidden bool, token *o
 	}
 	if m["error"] != nil {
 		return nil, errors.New(m["error"].(string))
-	}
-	if m["data"] == nil {
-		return nil, nil
 	}
 	return m["data"].(map[string]interface{}), nil
 }
@@ -150,6 +176,33 @@ func GetDirectory(p_id string, name string, skip_tls_verify bool) (map[string]in
 	if err != nil {
 		return nil, err
 	}
+	if err != nil {
+		return nil, err
+	}
+	m, err := common.ReadAsMap(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if m["error"] != nil {
+		return nil, errors.New(m["error"].(string))
+	}
+	if m["data"] == nil {
+		return nil, nil
+	}
+	return m["data"].(map[string]interface{}), nil
+}
+
+func FileInfo(md5 string, size int64) (map[string]interface{}, error) {
+	params := url.Values{}
+	params.Add("md5", md5)
+	params.Add("size", strconv.FormatInt(size, 10))
+	url := GlobalConfig().BaseApiUrlPath + "file-info" + "?" + params.Encode()
+	token, err := GetToken()
+	if err != nil {
+		return nil, err
+	}
+	rar := common.NewRestApiRequest("GET", url, nil).SetAuthHeader(token)
+	resp, err := rac.Do(rar)
 	if err != nil {
 		return nil, err
 	}
@@ -235,5 +288,11 @@ func SaveToken(token *oauth2.Token) {
 		panic(err)
 	} else if err := ioutil.WriteFile(token_save_path, b, os.ModePerm); err != nil {
 		panic(err)
+	}
+}
+func CheckErr(err error) {
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(1)
 	}
 }

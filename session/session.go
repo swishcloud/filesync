@@ -134,7 +134,7 @@ func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_s
 	if err != nil {
 		return err
 	}
-	if payload != nil {
+	if payload != nil && payload_size > 0 {
 		written := int64(0)
 		total := msg.BodySize
 		s.presentWriteProgress = func(n int) {
