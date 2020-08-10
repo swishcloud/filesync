@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/swishcloud/filesync/internal"
 	"github.com/swishcloud/filesync/message"
@@ -77,6 +78,7 @@ var uploadCmd = &cobra.Command{
 		file_path, err = filepath.Abs(file_path)
 		internal.CheckErr(err)
 		root_path := filepath.Dir(file_path)
+		root_path = strings.TrimRight(root_path, "\\") //the windows root directory will remains trailing slashes,for example:C:\
 		fmt.Println(`will upload ` + file_path)
 		files := []*common.FileInfoWrapper{}
 		err = common.ReadAllFiles(file_path, &files)
@@ -108,7 +110,9 @@ var uploadCmd = &cobra.Command{
 }
 
 func getServerPath(file_path, local_root_path, server_location string) string {
-	return filepath.Join(server_location, file_path[len(local_root_path)+1:])
+	p := filepath.Join(server_location, file_path[len(local_root_path)+1:])
+	p = strings.ReplaceAll(p, "\\", "/")
+	return p
 }
 func uploadFiles(files []string, local_root_path, server_location string) (actions []models.FileAction, err error) {
 	for _, file_path := range files {
