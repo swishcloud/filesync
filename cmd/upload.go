@@ -100,6 +100,7 @@ var uploadCmd = &cobra.Command{
 			fa := models.FileAction{}
 			fa.ActionType = 1
 			fa.Md5 = ""
+			fa.FileType = 2
 			fa.Path = p
 			folder_actions = append(folder_actions, fa)
 		}
@@ -123,6 +124,7 @@ func uploadFiles(files []string, local_root_path, server_location string) (actio
 
 		fa := models.FileAction{}
 		fa.ActionType = 1
+		fa.FileType = 1
 		fa.Md5 = md5
 		fa.Path = getServerPath(file_path, local_root_path, server_location)
 		actions = append(actions, fa)

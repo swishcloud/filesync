@@ -17,6 +17,7 @@ type FileAction struct {
 	Path string
 	//action type:1 add.
 	ActionType int
+	FileType   int
 	Md5        string
 }
 
