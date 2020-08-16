@@ -13,12 +13,16 @@ type Log struct {
 	File_md5    *string
 	File_size   *int64
 }
-type FileAction struct {
-	Path string
-	//action type:1 add.
-	ActionType int
-	FileType   int
-	Md5        string
+type CreateFileAction struct {
+	Name     string
+	Md5      string
+	Location string
+	IsHidden bool
+}
+
+type CreateDirectoryAction struct {
+	Path     string
+	IsHidden bool
 }
 
 type File struct {

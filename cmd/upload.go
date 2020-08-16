@@ -94,18 +94,14 @@ var uploadCmd = &cobra.Command{
 		}
 		file_actions, err := uploadFiles(filePaths, root_path, location)
 		internal.CheckErr(err)
-		folder_actions := []models.FileAction{}
+		folder_actions := []models.CreateDirectoryAction{}
 		for _, folder_path := range folderPaths {
 			p := getServerPath(folder_path, root_path, location)
-			fa := models.FileAction{}
-			fa.ActionType = 1
-			fa.Md5 = ""
-			fa.FileType = 2
+			fa := models.CreateDirectoryAction{}
 			fa.Path = p
 			folder_actions = append(folder_actions, fa)
 		}
-		actions := append(folder_actions, file_actions...)
-		err = internal.HttpPostFileAction(actions)
+		err = internal.HttpPostFileAction(folder_actions, file_actions)
 		internal.CheckErr(err)
 	},
 }
@@ -115,18 +111,17 @@ func getServerPath(file_path, local_root_path, server_location string) string {
 	p = strings.ReplaceAll(p, "\\", "/")
 	return p
 }
-func uploadFiles(files []string, local_root_path, server_location string) (actions []models.FileAction, err error) {
+func uploadFiles(files []string, local_root_path, server_location string) (actions []models.CreateFileAction, err error) {
 	for _, file_path := range files {
 		md5, err := common.FileMd5Hash(file_path)
 		if err != nil {
 			return nil, err
 		}
 
-		fa := models.FileAction{}
-		fa.ActionType = 1
-		fa.FileType = 1
+		fa := models.CreateFileAction{}
 		fa.Md5 = md5
-		fa.Path = getServerPath(file_path, local_root_path, server_location)
+		fa.Location = filepath.Dir(getServerPath(file_path, local_root_path, server_location))
+		fa.Name = filepath.Base(file_path)
 		actions = append(actions, fa)
 
 		fmt.Println(`file:`, file_path)

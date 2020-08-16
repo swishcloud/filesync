@@ -92,13 +92,18 @@ func GetLogs(start int64) ([]models.Log, error) {
 	return result.Data, nil
 }
 
-func HttpPostFileAction(actions []models.FileAction) error {
-	b, err := json.Marshal(actions)
+func HttpPostFileAction(directory_actions []models.CreateDirectoryAction, file_actions []models.CreateFileAction) error {
+	directory_b, err := json.Marshal(directory_actions)
+	if err != nil {
+		return err
+	}
+	file_b, err := json.Marshal(file_actions)
 	if err != nil {
 		return err
 	}
 	params := url.Values{}
-	params.Add("actions", string(b))
+	params.Add("directory_actions", string(directory_b))
+	params.Add("file_actions", string(file_b))
 	url := GlobalConfig().BaseApiUrlPath + "file"
 	token, err := GetToken()
 	if err != nil {
