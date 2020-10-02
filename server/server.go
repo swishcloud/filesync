@@ -276,9 +276,12 @@ func (s *FileSyncServer) serveClient(client *client) {
 		case message.MT_Request_Repeat:
 		case message.MT_Download_File:
 			file_path := s.config.fileDir() + msg.Header["path"].(string)
-			session.SendFile(file_path, func(filename string, md5 string, size int64) (int64, bool) {
+			err := session.SendFile(file_path, func(filename string, md5 string, size int64) (int64, bool) {
 				return 0, true
 			})
+			if err != nil {
+				panic(err)
+			}
 		case message.MT_DISCONNECT:
 			panic(errors.New("peer requested to disconnect connections"))
 		case message.MT_SYNC:
