@@ -74,7 +74,11 @@ var uploadCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		file_path, err := cmd.Flags().GetString("file_path")
 		internal.CheckErr(err)
-		location := "/"
+		location, err := cmd.Flags().GetString("location")
+		internal.CheckErr(err)
+		if location == "" {
+			location = "/"
+		}
 		file_path, err = filepath.Abs(file_path)
 		internal.CheckErr(err)
 		root_path := filepath.Dir(file_path)
@@ -192,6 +196,7 @@ func uploadFiles(files []string, local_root_path, server_location string) (actio
 func init() {
 	rootCmd.AddCommand(uploadCmd)
 	uploadCmd.Flags().String("file_path", "", "the path of file to upload")
+	uploadCmd.Flags().String("location", "", "the server location where upload files to")
 	uploadCmd.MarkFlagRequired("file_path")
 }
 

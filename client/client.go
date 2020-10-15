@@ -98,7 +98,7 @@ func SendFile(file_path, directory_path string, is_hidden bool) error {
 		insert_parameters.Add("size", strconv.FormatInt(size, 10))
 		insert_parameters.Add("directory_path", directory_path)
 		insert_parameters.Add("is_hidden", strconv.FormatBool(is_hidden))
-		rar := common.NewRestApiRequest("POST", x.GetApiUrlPath("file"), []byte(insert_parameters.Encode())).SetAuthHeader(token)
+		rar := common.NewRestApiRequest("POST", internal.GetApiUrlPath("file"), []byte(insert_parameters.Encode())).SetAuthHeader(token)
 		resp, err := internal.RestApiClient().Do(rar)
 		if err != nil {
 			return err

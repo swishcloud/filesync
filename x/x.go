@@ -10,8 +10,6 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
-
-	"github.com/swishcloud/filesync/internal"
 )
 
 const Server_id = "5f1edf5340ad0252d2fb3f85519badb8"
@@ -79,9 +77,6 @@ func PathExist(file_path string) bool {
 	return err == nil
 }
 
-func GetApiUrlPath(p string) string {
-	return internal.GlobalConfig().BaseApiUrlPath + p
-}
 func LogReader(prefix string, r io.Reader) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
