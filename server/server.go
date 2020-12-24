@@ -58,11 +58,11 @@ func (cfg *config) tempDir() string {
 
 func NewFileSyncServer(config_file_path string, skip_tls_verify bool) *FileSyncServer {
 	s := &FileSyncServer{}
-	s.storage = &storage.SQLITEManager{}
+	//s.storage = &storage.SQLITEManager{}
+	//s.storage.Initialize()
 	s.clients = []*client{}
 	s.connect = make(chan *session.Session)
 	s.disconnect = make(chan *session.Session)
-	s.storage.Initialize()
 	s.skip_tls_verify = skip_tls_verify
 	s.httpClient = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: skip_tls_verify}}}
 	http.DefaultClient = s.httpClient
@@ -181,14 +181,14 @@ func (s *FileSyncServer) serveClient(client *client) {
 			reply_msg.MsgType = message.MT_PANG
 			session.SendMessage(reply_msg, nil, 0)
 		case message.MT_FILE:
-			// _, token, err := s.checkToken(msg)
-			// if err != nil {
-			// 	panic(err)
-			// }
+			_, token, err := s.checkToken(msg)
+			if err != nil {
+				panic(err)
+			}
 			file_path := s.config.fileDir() + msg.Header["path"].(string)
 			md5 := msg.Header["md5"].(string)
-			file_size := msg.Header["file_size"].(int64)
-			uploaded_size := msg.Header["uploaded_size"].(int64)
+			file_size := int64(msg.Header["file_size"].(float64))
+			uploaded_size := int64(msg.Header["uploaded_size"].(float64))
 			server_file_id := msg.Header["server_file_id"].(string)
 			block_name := uuid.New().String()
 			block_path := s.config.blockDir() + block_name
@@ -210,7 +210,7 @@ func (s *FileSyncServer) serveClient(client *client) {
 			parameters.Add("name", block_name)
 			parameters.Add("start", strconv.FormatInt(start, 10))
 			parameters.Add("end", strconv.FormatInt(end, 10))
-			rar := common.NewRestApiRequest("POST", internal.GetApiUrlPath("file-block"), []byte(parameters.Encode()))
+			rar := common.NewRestApiRequest("POST", internal.GetApiUrlPath("file-block"), []byte(parameters.Encode())).SetAuthHeader(token)
 			_, err = internal.RestApiClient().Do(rar)
 			if err != nil {
 				panic(err)
@@ -218,7 +218,7 @@ func (s *FileSyncServer) serveClient(client *client) {
 			//assemble files if bytes of whole file has uploaded
 			if end == file_size {
 				//query all file blocks
-				rar := common.NewRestApiRequest("GET", internal.GetApiUrlPath("file-block")+"?server_file_id="+server_file_id, nil)
+				rar := common.NewRestApiRequest("GET", internal.GetApiUrlPath("file-block")+"?server_file_id="+server_file_id, nil).SetAuthHeader(token)
 				resp, err := internal.RestApiClient().Do(rar)
 				if err != nil {
 					panic(err)
@@ -265,7 +265,7 @@ func (s *FileSyncServer) serveClient(client *client) {
 					panic(err)
 				}
 				//change status
-				rar = common.NewRestApiRequest("PUT", internal.GetApiUrlPath("file"), []byte(fmt.Sprintf("server_file_id=%s", server_file_id)))
+				rar = common.NewRestApiRequest("PUT", internal.GetApiUrlPath("file"), []byte(fmt.Sprintf("server_file_id=%s", server_file_id))).SetAuthHeader(token)
 				_, err = internal.RestApiClient().Do(rar)
 				if err != nil {
 					panic(err)

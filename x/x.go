@@ -3,8 +3,8 @@ package x
 import (
 	"bytes"
 	"crypto/md5"
-	"encoding/gob"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io"
 	"io/ioutil"
@@ -16,7 +16,7 @@ const Server_id = "5f1edf5340ad0252d2fb3f85519badb8"
 
 func Encode(data interface{}) ([]byte, error) {
 	buf := new(bytes.Buffer)
-	enc := gob.NewEncoder(buf)
+	enc := json.NewEncoder(buf)
 	err := enc.Encode(data)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func Write(w io.Writer, data interface{}) error {
 	return nil
 }
 func Read(r io.Reader, data interface{}) error {
-	dec := gob.NewDecoder(r)
+	dec := json.NewDecoder(r)
 	err := dec.Decode(data)
 	if err != nil {
 		return err

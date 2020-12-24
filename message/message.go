@@ -2,7 +2,7 @@ package message
 
 import (
 	"bytes"
-	"encoding/gob"
+	"encoding/json"
 	"io"
 )
 
@@ -33,7 +33,7 @@ func NewMessage(msgType int) *Message {
 }
 func (msg *Message) Reader() io.Reader {
 	buf := new(bytes.Buffer)
-	enc := gob.NewEncoder(buf)
+	enc := json.NewEncoder(buf)
 	err := enc.Encode(msg)
 	if err != nil {
 		panic(err)
@@ -41,7 +41,7 @@ func (msg *Message) Reader() io.Reader {
 	return buf
 }
 func ReadMessage(r io.Reader) (*Message, error) {
-	dec := gob.NewDecoder(r)
+	dec := json.NewDecoder(r)
 	msg := new(Message)
 	err := dec.Decode(msg)
 	if err != nil {
