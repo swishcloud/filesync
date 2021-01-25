@@ -68,7 +68,7 @@ func (s *Session) ReadMessage() (*message.Message, error) {
 			break
 		}
 	}
-	size, err := strconv.Atoi(string(size_b))
+	size, err := strconv.ParseInt(string(size_b), 16, 64)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,7 @@ func (s *Session) SendMessage(msg *message.Message, payload io.Reader, payload_s
 		return err
 	}
 
-	size_b := []byte(strconv.Itoa(len(msg_b)))
+	size_b := []byte(strconv.FormatInt((int64)(len(msg_b)), 16))
 
 	_, err = io.CopyN(s, bytes.NewReader(size_b), int64(len(size_b)))
 	if err != nil {

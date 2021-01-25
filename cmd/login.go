@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/swishcloud/gostudy/keygenerator"
@@ -16,9 +18,21 @@ import (
 	"golang.org/x/oauth2"
 )
 
+func save_token_for_cpp(token *oauth2.Token) {
+	if err := ioutil.WriteFile("token", []byte(token.AccessToken), os.ModePerm); err != nil {
+		panic(err)
+	}
+}
+
 var loginCmd = &cobra.Command{
 	Use: "login",
 	Run: func(cmd *cobra.Command, args []string) {
+		token, err := internal.GetToken()
+		if err == nil {
+			save_token_for_cpp(token)
+			return
+		}
+
 		pkce, err := keygenerator.NewKey(43, false, false, false, true)
 		if err != nil {
 			panic(err)
@@ -34,11 +48,12 @@ var loginCmd = &cobra.Command{
 		fmt.Print("Enter authenfication code:")
 		code := ""
 		fmt.Scan(&code)
-		token, err := conf.Exchange(context.WithValue(context.Background(), "", internal.HttpClient()), code, oauth2.SetAuthURLParam("code_verifier", pkce))
+		token, err = conf.Exchange(context.WithValue(context.Background(), "", internal.HttpClient()), code, oauth2.SetAuthURLParam("code_verifier", pkce))
 		if err != nil {
 			log.Fatal(err)
 		}
 		internal.SaveToken(token)
+		save_token_for_cpp(token)
 	},
 }
 
