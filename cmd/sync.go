@@ -170,7 +170,7 @@ func pre_sync(rootpath string) {
 			}
 			store.SetMerge(file.Id, true)
 		} else if file.File_type == 1 { //file
-			if exists, err := common.CheckIfFileExits(filepath); err != nil {
+			if exists, err := common.CheckIfFileExists(filepath); err != nil {
 				panic(err)
 			} else {
 				if exists { //the local file exists.
@@ -215,7 +215,7 @@ func sync(rootpath string) {
 		location := regexp.MustCompile(".*/").FindString(relative_filepath)
 		location = strings.TrimSuffix(location, "/")
 		filepath := path.Join(rootpath, relative_filepath)
-		if exist, err := common.CheckIfFileExits(filepath); err != nil {
+		if exist, err := common.CheckIfFileExists(filepath); err != nil {
 			log.Println(err)
 		} else {
 			if file.File_type == 1 { //file
