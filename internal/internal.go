@@ -27,7 +27,7 @@ type globalConfig struct {
 
 const TokenHeaderKey = "access_token"
 
-const token_save_path = ".cache/token"
+var token_save_path = ".cache/token"
 
 var httpClient *http.Client
 
@@ -300,4 +300,7 @@ func CheckErr(err error) {
 		log.Fatal(err)
 		os.Exit(1)
 	}
+}
+func Token_save_path(val string) {
+	token_save_path = val
 }
