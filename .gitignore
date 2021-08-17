@@ -20,3 +20,4 @@ filesync
 debug
 .cache
 .dist
+/.vs/
