@@ -23,6 +23,7 @@ type globalConfig struct {
 	AuthUrl            string
 	TokenURL           string
 	WebServerTcpAddess string
+	RedirectURL        string
 }
 
 const TokenHeaderKey = "access_token"
@@ -48,11 +49,13 @@ func GlobalConfig() globalConfig {
 			gc.AuthUrl = "https://192.168.1.1:8010/oauth2/auth"
 			gc.TokenURL = "https://192.168.1.1:8010/oauth2/token"
 			gc.WebServerTcpAddess = "192.168.1.1:2003"
+			gc.RedirectURL = "https://192.168.1.1:8010/.approvalnativeapp"
 		} else {
 			gc.BaseApiUrlPath = "https://cloud.swish-cloud.com/api/"
 			gc.AuthUrl = "https://id.swish-cloud.com/oauth2/auth"
 			gc.TokenURL = "https://id.swish-cloud.com/oauth2/token"
 			gc.WebServerTcpAddess = "cloud.swish-cloud.com:8007"
+			gc.RedirectURL = "https://id.swish-cloud.com/.approvalnativeapp"
 		}
 	}
 	return *gc
@@ -65,6 +68,7 @@ func OAuth2Config() *oauth2.Config {
 		AuthURL:  GlobalConfig().AuthUrl,
 		TokenURL: GlobalConfig().TokenURL,
 	}
+	conf.RedirectURL = GlobalConfig().RedirectURL
 	return &conf
 }
 func GetLogs(start int64) ([]models.Log, error) {
