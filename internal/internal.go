@@ -49,7 +49,7 @@ func GlobalConfig() globalConfig {
 			gc.AuthUrl = "https://192.168.1.1:8010/oauth2/auth"
 			gc.TokenURL = "https://192.168.1.1:8010/oauth2/token"
 			gc.WebServerTcpAddess = "192.168.1.1:2003"
-			gc.RedirectURL = "https://192.168.1.1:8010/.approvalnativeapp"
+			gc.RedirectURL = "https://192.168.1.1:11109/.approvalnativeapp"
 		} else {
 			gc.BaseApiUrlPath = "https://cloud.swish-cloud.com/api/"
 			gc.AuthUrl = "https://id.swish-cloud.com/oauth2/auth"
