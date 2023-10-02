@@ -279,7 +279,7 @@ func GetToken() (*oauth2.Token, error) {
 	if err := yaml.Unmarshal(b, token); err != nil {
 		return nil, err
 	}
-	ts := OAuth2Config().TokenSource(context.WithValue(context.Background(), "", HttpClient()), token)
+	ts := OAuth2Config().TokenSource(context.WithValue(context.Background(), oauth2.HTTPClient, HttpClient()), token)
 	t, err := ts.Token()
 	if err != nil {
 		return nil, err
